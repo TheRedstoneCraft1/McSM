@@ -10,6 +10,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using static McSM.Stuff;
 class Program
 {
     [DllImport("kernel32.dll")]
@@ -64,21 +65,19 @@ class Program
     }
 
     static void Draw(int breite, int hoehe)
-    {
+    {   if (breite < 56 || hoehe < 25)
+        {
+                McSM.Lib.ZeichneRahmen(breite, hoehe, "2", ConsoleColor.Red);
+                McSM.Lib.Text(0, 0, ["Your terminal window is too small. Please enlarge it to continue.", "", "Tip: you can also zoom the window so you don't have to change the size [CTRL + mouse wheel ]"], ConsoleColor.Red);
+                return;
+        }
         if (McSM.Json.Data.gui.page <= -1)
         {
             Environment.Exit(0);
         }
         else if (McSM.Json.Data.gui.page == 0)
         {
-            if (breite < 56 || hoehe < 25)
-            {
-                McSM.Lib.ZeichneRahmen(breite, hoehe, "2", ConsoleColor.Red);
-                McSM.Lib.Text(0, 0, ["Your terminal window is too small. Please enlarge it to continue.", "", "Tip: you can also zoom the window so you don't have to change the size [CTRL + mouse wheel ]"], ConsoleColor.Red);
-
-
-                return;
-            }
+            
             McSM.Json.Save(McSM.Json.Data);
             McSM.Lib.ZeichneRahmen(breite, hoehe, "3", ConsoleColor.DarkGray);
             McSM.Stuff.Logo();
@@ -95,18 +94,21 @@ class Program
         else if (McSM.Json.Data.gui.page == 1)
         {
             McSM.Json.Save(McSM.Json.Data);
+            McSM.Lib.Text(0, 0, "gui.text.disclaimer", ConsoleColor.Red);
+            McSM.Lib.AddButton(breite - 3, hoehe - 3, "gui.text.disclaimer.accept", () => McSM.Json.Data.gui.page++, "r", ConsoleColor.Green);
             McSM.Lib.AddButton(2, hoehe - 3, "gui.back", () => McSM.Json.Data.gui.page--, "l", ConsoleColor.Red);
         }
         else if (McSM.Json.Data.gui.page == 2)
         {
             McSM.Json.Save(McSM.Json.Data);
-            
-            McSM.Lib.ZeichneRahmen(breite, hoehe, "3", ConsoleColor.Red);
-            McSM.Lib.Text(0, 0, "gui.text.disclaimer", ConsoleColor.Red);
-            McSM.Lib.AddButton(breite - 3, hoehe - 3, "gui.text.disclaimer.accept", () => McSM.Json.Data.gui.page++, "r", ConsoleColor.Green);
-            McSM.Stuff.Logo();
-            McSM.Lib.Cut("H", 9,"6",ConsoleColor.Red);
-            McSM.Lib.Cut("V", 0, "6", ConsoleColor.Red);
+            McSM.Lib.Text(0, 0, "gui.text.javascann", ConsoleColor.Red);
+            JavaScanner.JavaScann();
+
+            McSM.Lib.AddButton(2, hoehe - 3, "gui.browser.back", () => McSM.Json.Data.gui.page = 0, "l", ConsoleColor.Red);
+        }
+        else if (McSM.Json.Data.gui.page == 8080)
+        {
+            McSM.Lib.AddButton(2, hoehe - 3, "gui.browser.back", () => McSM.Json.Data.gui.page = 0, "l", ConsoleColor.Red);
         }
     }
 }

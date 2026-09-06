@@ -16,7 +16,7 @@ public class Server
         listener.Start();
         Console.WriteLine("WS: http://localhost:8080/");
         Process.Start(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? new ProcessStartInfo("http://localhost:8080") { UseShellExecute = true } : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? new ProcessStartInfo("open", "http://localhost:8080") : new ProcessStartInfo("xdg-open", "http://localhost:8080"));
-
+        McSM.Json.Data.gui.page = 8080;
 
         while (true)
         {

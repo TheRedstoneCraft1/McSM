@@ -1,5 +1,11 @@
 ﻿namespace McSM;
+
+using Microsoft.Win32;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+
 
 
 public static class Lib
@@ -84,6 +90,9 @@ public static class Lib
     {
         try
         {
+            // Alle Zeilen durch Translation.Key() durchsuchen
+            lines = lines.Select(line => Translation.Key(line)).ToArray();
+
             // ANSI-Escape-Sequenzen entfernen für Längenmessung
             var stripAnsi = (string str) =>
                 System.Text.RegularExpressions.Regex.Replace(str, @"\x1b\[[0-9;]*m", "");
@@ -122,6 +131,7 @@ public static class Lib
     }
 
     #endregion
+
 
     #region Cut
     public static void Cut(string direction, int pos, string style = "solid", ConsoleColor color = ConsoleColor.White)
@@ -427,10 +437,9 @@ public static class Lib
     #endregion
 
 }
-
 public static class Translation
 {
-    private static readonly Dictionary<string, string> translations = new();
+    private static readonly Dictionary<string, string> _translations = new();
 
     public static void Load(string language)
     {
@@ -454,19 +463,53 @@ public static class Translation
         if (loadedTranslations == null)
             return;
 
-        translations.Clear();
+        _translations.Clear();
 
         foreach (var item in loadedTranslations)
         {
-            translations[item.Key] = item.Value;
+            _translations[item.Key] = item.Value;
         }
     }
 
+    // Overload 1: Einfache Schlüssel-Übersetzung
     public static string Key(string text)
     {
-        return translations.TryGetValue(text, out string? translation)
+        return _translations.TryGetValue(text, out string? translation)
             ? translation
             : text;
+    }
+
+    // Overload 2: Mit benannten Parametern
+    public static string Key(string key, params (string name, object value)[] parameters)
+    {
+        string translation = Key(key); // Erst übersetzen
+
+        foreach (var (name, value) in parameters)
+        {
+            translation = translation.Replace($"{{{name}}}", value?.ToString() ?? "");
+        }
+
+        return translation;
+    }
+
+    // Overload 3: Mit Objekt-Reflection
+    public static string Key(string key, object? obj)
+    {
+        string translation = Key(key);
+
+        if (obj == null)
+            return translation;
+
+        var properties = obj.GetType().GetProperties();
+
+        foreach (var prop in properties)
+        {
+            string placeholder = $"{{{prop.Name}}}";
+            string value = prop.GetValue(obj)?.ToString() ?? "";
+            translation = translation.Replace(placeholder, value);
+        }
+
+        return translation;
     }
 }
 
@@ -597,6 +640,310 @@ public static class Json
 }
 
 public static class Stuff {
+
+    public class JavaScanner
+    {
+        public static List<JavaInstallation> FindJavaInstallations()
+        {
+            var installations = new List<JavaInstallation>();
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) installations.AddRange(FindJavaOnWindows());
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) installations.AddRange(FindJavaOnLinux());
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) installations.AddRange(FindJavaOnMacOS()); 
+            return installations;
+        }
+        private static List<JavaInstallation> FindJavaOnWindows()
+        {
+            var installations = new List<JavaInstallation>();
+            var registryPaths = new[] {
+                @"HKEY_LOCAL_MACHINE\SOFTWARE\JavaSoft\JDK",
+                @"HKEY_LOCAL_MACHINE\SOFTWARE\JavaSoft\JRE",
+                @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\JavaSoft\JDK",
+                @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\JavaSoft\JRE"
+            };
+            foreach (var regPath in registryPaths)
+            {
+                try
+                {
+                    var key = Registry.LocalMachine.OpenSubKey(regPath.Replace(@"HKEY_LOCAL_MACHINE\", "")); if (key != null)
+                    {
+                        foreach (var subKeyName in key.GetSubKeyNames())
+                        {
+                            var subKey = key.OpenSubKey(subKeyName); var javaHome = subKey?.GetValue("JavaHome")?.ToString();
+                            if (!string.IsNullOrEmpty(javaHome) && Directory.Exists(javaHome)) { var version = GetJavaVersion(javaHome); installations.Add(new JavaInstallation { Version = version, JavaHome = javaHome, ExecutablePath = Path.Combine(javaHome, "bin", "java.exe") }); }
+                        }
+                    }
+                }
+                catch { }
+            }
+            var searchPaths = new[]
+            {
+                Environment.GetEnvironmentVariable("JAVA_HOME"),
+                @"C:\Program Files\Java",
+                @"C:\Program Files (x86)\Java"
+            };
+            foreach (var path in searchPaths) { if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) { installations.AddRange(ScanDirectoryForJava(path)); } }
+            return installations.DistinctBy(x => x.JavaHome).ToList();
+        }
+        private static List<JavaInstallation> FindJavaOnLinux()
+        {
+            var installations = new List<JavaInstallation>();
+            var searchPaths = new[] {
+                "/usr/lib/jvm",
+                "/opt/java",
+                Environment.GetEnvironmentVariable("JAVA_HOME")
+            };
+            foreach (var path in searchPaths)
+            {
+                if (!string.IsNullOrEmpty(path) && Directory.Exists(path))  installations.AddRange(ScanDirectoryForJava(path));
+            } 
+            try {
+                var result = ExecuteCommand("which", "java");
+                if (!string.IsNullOrEmpty(result)) 
+                {
+                    var javaPath = result.Trim();
+                    var javaHome = Path.GetDirectoryName(Path.GetDirectoryName(javaPath));
+                    var version = GetJavaVersion(javaHome);
+                    installations.Add(new JavaInstallation
+                    {
+                        Version = version,
+                        JavaHome = javaHome,
+                        ExecutablePath = javaPath
+                    });
+                }
+            }
+            catch { }
+            return installations.DistinctBy(x => x.JavaHome).ToList();
+        }
+        private static List<JavaInstallation> FindJavaOnMacOS()
+        {
+            var installations = new List<JavaInstallation>();
+            var searchPaths = new[] { "/Library/Java/JavaVirtualMachines", "/System/Library/Java/JavaVirtualMachines", Environment.GetEnvironmentVariable("JAVA_HOME") };
+            foreach (var path in searchPaths) { if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) { installations.AddRange(ScanDirectoryForJava(path)); } }
+            return installations.DistinctBy(x => x.JavaHome).ToList();
+        }
+        private static List<JavaInstallation> ScanDirectoryForJava(string basePath)
+        {
+            var installations = new List<JavaInstallation>();
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(basePath))
+                {
+                    var javaExe = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? Path.Combine(dir, "bin", "java.exe") : Path.Combine(dir, "bin", "java");
+                    if (File.Exists(javaExe) || Directory.Exists(Path.Combine(dir, "Contents", "Home")))
+                    {
+                        var javaHome = dir;                   if (Directory.Exists(Path.Combine(dir, "Contents", "Home")))                    {                        javaHome = Path.Combine(dir, "Contents", "Home");                    }
+                        var version = GetJavaVersion(javaHome); installations.Add(new JavaInstallation { Version = version, JavaHome = javaHome, ExecutablePath = javaExe });
+                    }
+                }
+            }
+            catch { }
+            return installations;
+        }
+        private static string GetJavaVersion(string javaHome)
+        {
+            try
+            {
+                var javaExe = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? Path.Combine(javaHome, "bin", "java.exe") : Path.Combine(javaHome, "bin", "java");
+                if (!File.Exists(javaExe)) return "Unbekannt";
+                var output = ExecuteCommand(javaExe, "-version");
+                var lines = output.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+                return lines.FirstOrDefault() ?? "Unbekannt";
+            } catch { return "Fehler beim Lesen"; }
+        }
+        private static string ExecuteCommand(string command, string arguments = "")
+        {
+            try
+            {
+                var psi = new ProcessStartInfo { FileName = command, Arguments = arguments, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+                using (var process = Process.Start(psi)) { var output = process?.StandardOutput.ReadToEnd() ?? ""; process?.WaitForExit(); return output; }
+            }
+            catch { return ""; }
+        }
+        public static void JavaScann()
+        {
+            var installations = FindJavaInstallations();
+            if (!installations.Any())
+            {
+                Lib.Text(0, 0, "gui.text.no_java_installations", ConsoleColor.Red);
+                return;
+            }
+            var lines = new List<string> {"╔═══════════════════════════════════════════════════════════╗"};
+
+            lines.Add("gui.text.java.headder");
+            lines.Add("╠═══════════════════════════════════════════════════════════╣");
+
+            foreach (var java in installations)
+            {
+                // Mit Padding VORHER machen, dann mit Translation.Key() übergeben
+                lines.Add(Translation.Key("gui.text.java.v",("Version", java.Version.PadRight(48))));
+
+                lines.Add(Translation.Key("gui.text.java.h",("JavaHome", java.JavaHome.PadRight(46))));
+
+                lines.Add("╟───────────────────────────────────────────────────────────╢");
+            }
+
+            lines[lines.Count - 1] = "╚═══════════════════════════════════════════════════════════╝";
+            Lib.Text(0, 0, lines.ToArray(), ConsoleColor.Green);
+        }
+
+
+    };
+    public class JavaInstallation
+    {
+        public string Version { get; set; } = "";
+        public string JavaHome { get; set; } = "";
+        public string ExecutablePath { get; set; } = "";
+    }
+
+    private static List<JavaInstallation> FindJavaInstallations()
+    {
+        var installations = new List<JavaInstallation>();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            installations.AddRange(FindJavaOnWindows());
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            installations.AddRange(FindJavaOnLinux());
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            installations.AddRange(FindJavaOnMac());
+        }
+
+        return installations.DistinctBy(x => x.JavaHome).ToList();
+    }
+
+    private static List<JavaInstallation> FindJavaOnWindows()
+    {
+        var installations = new List<JavaInstallation>();
+        var paths = new[]
+        {
+        @"C:\Program Files\Java",
+        @"C:\Program Files (x86)\Java",
+        Environment.GetEnvironmentVariable("JAVA_HOME") ?? ""
+    };
+
+        foreach (var path in paths.Where(p => !string.IsNullOrEmpty(p)))
+        {
+            if (!Directory.Exists(path)) continue;
+
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                var javaBin = Path.Combine(dir, "bin", "java.exe");
+                if (File.Exists(javaBin))
+                {
+                    var version = GetJavaVersion(javaBin);
+                    installations.Add(new JavaInstallation
+                    {
+                        Version = version,
+                        JavaHome = dir,
+                        ExecutablePath = javaBin
+                    });
+                }
+            }
+        }
+
+        return installations;
+    }
+
+    private static List<JavaInstallation> FindJavaOnLinux()
+    {
+        var installations = new List<JavaInstallation>();
+        var paths = new[]
+        {
+        "/usr/lib/jvm",
+        "/opt/java",
+        Environment.GetEnvironmentVariable("JAVA_HOME") ?? ""
+    };
+
+        foreach (var path in paths.Where(p => !string.IsNullOrEmpty(p)))
+        {
+            if (!Directory.Exists(path)) continue;
+
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                var javaBin = Path.Combine(dir, "bin", "java");
+                if (File.Exists(javaBin))
+                {
+                    var version = GetJavaVersion(javaBin);
+                    installations.Add(new JavaInstallation
+                    {
+                        Version = version,
+                        JavaHome = dir,
+                        ExecutablePath = javaBin
+                    });
+                }
+            }
+        }
+
+        return installations;
+    }
+
+    private static List<JavaInstallation> FindJavaOnMac()
+    {
+        var installations = new List<JavaInstallation>();
+        var paths = new[]
+        {
+        "/Library/Java/JavaVirtualMachines",
+        "/System/Library/Java/JavaVirtualMachines",
+        Environment.GetEnvironmentVariable("JAVA_HOME") ?? ""
+    };
+
+        foreach (var path in paths.Where(p => !string.IsNullOrEmpty(p)))
+        {
+            if (!Directory.Exists(path)) continue;
+
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                var javaBin = Path.Combine(dir, "Contents", "Home", "bin", "java");
+                if (File.Exists(javaBin))
+                {
+                    var version = GetJavaVersion(javaBin);
+                    installations.Add(new JavaInstallation
+                    {
+                        Version = version,
+                        JavaHome = dir,
+                        ExecutablePath = javaBin
+                    });
+                }
+            }
+        }
+
+        return installations;
+    }
+
+    private static string GetJavaVersion(string javaExecutablePath)
+    {
+        try
+        {
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = javaExecutablePath,
+                    Arguments = "-version",
+                    UseShellExecute = false,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            string output = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            var match = Regex.Match(output, @"version ""([^""]+)""");
+            return match.Success ? match.Groups[1].Value : "Unknown";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+
+
 
 
     public static void Logo()
