@@ -1,0 +1,11 @@
+{
+	"gui.done": "Fertig",
+	"gui.continue": "Weiter",
+	"gui.cancel": "Abbrechen",
+	"gui.back": "Zurück",
+	"gui.browser.app": "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n┃ ▶ Program Im Browser ausfürehn ┃\n┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛",
+	"gui.language": "Sprache ändern [aktuell: de_de]",
+	"gui.exit": "Benden",
+    "gui.text.disclaimer_": "Haftungsausschluss für McSM\n\nMcSM ist ein kostenloses Tool zur Verwaltung von Minecraft-Servern. Es hostet KEINE Server, speichert KEINE Serverdaten und kontrolliert NICHT den Serverinhalt.\n\nDafür bist du verantwortlich:\n• Deine Serverdateien und Daten\n• Alle Mods, Plugins und Software\n• Minecraft-EULA-Einhaltung\n• Rechtliche Compliance und Serverinhalt\n\nDafür garantiert McSM nicht:\nKeine Verfügbarkeit, Kompatibilität oder Performance.\n\nMeldungen & Durchsetzung:\nNutzer können Server melden. McSM-Moderatoren prüfen Meldungen und können Server sperren sowie Domains zurückziehen bei Phishing, Malware, illegalen Inhalten, EULA-Verstößen oder anderem Missbrauch.\n\nDrittanbieter:\nMcSM steht nicht in Verbindung mit Mojang oder Microsoft. Wir nutzen Google/Apple/Microsoft-Login und Google Analytics.\n\nHaftung:\nMcSMs Haftung richtet sich nach dem Gesetz. Zwingende Ansprüche bleiben unberührt.",
+	"gui.text.disclaimer.accept": "Ich Akzeptiere"
+}
